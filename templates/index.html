@@ -69,6 +69,21 @@
                     </div>
 
                     <div style="margin-top: 15px; border-top: 1px solid #e9ecef; padding-top: 15px;">
+                        <label>PDF Output Format:</label>
+                        <div class="checkbox-container" style="margin-top: 10px;">
+                            <div class="checkbox-item">
+                                <input type="radio" id="format_human" name="output_format" value="human" checked>
+                                <label for="format_human">Human Readable (Standard Size)</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="radio" id="format_machine" name="output_format" value="machine">
+                                <label for="format_machine">Machine Readable (Compact Size)</label>
+                            </div>
+                        </div>
+                        <p><small>Machine readable format uses smaller fonts (3px) to significantly reduce file size but may be difficult to read.</small></p>
+                    </div>
+
+                    <div style="margin-top: 15px; border-top: 1px solid #e9ecef; padding-top: 15px;">
                         <label>Include File Categories:</label>
                         <div class="checkbox-container" style="margin-top: 10px;">
                             <div class="checkbox-item">
@@ -87,6 +102,7 @@
                     </div>
                 </div>
             </div>
+
 
             <div class="info-box" style="background-color: #e8f5e9; border-left-color: #4caf50;">
                 <h3>How Files Are Processed</h3>

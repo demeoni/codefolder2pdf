@@ -170,7 +170,7 @@ def get_folder_structure(path, level=0, prefix_map=None, excluded_dirs=None, inc
     except (PermissionError, OSError):
         return line + indent + "    (Access error)\n"
 
-def generate_improved_structure_pdf(output_path, root_path, excluded_dirs=None, pdf_title=None):
+def generate_improved_structure_pdf(output_path, root_path, excluded_dirs=None, pdf_title=None, machine_format=False):
     """Generate a PDF with explicit tree visualization."""
     from reportlab.lib.pagesizes import letter
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Preformatted
@@ -181,12 +181,12 @@ def generate_improved_structure_pdf(output_path, root_path, excluded_dirs=None, 
         excluded_dirs = COMMON_EXCLUDED_DIRS
 
     # Common elements for all PDFs
-    styles = getSampleStyleTools()
+    styles = getSampleStyleTools(machine_format=machine_format)
 
     # Create a custom monospaced style for tree structure
     tree_style = styles['Code']
     tree_style.fontName = 'Courier'  # Ensure monospace font
-    tree_style.fontSize = 8          # Smaller font for more content
+    tree_style.fontSize = 3 if machine_format else 8  # Use smaller font for machine format
 
     # Prepare document elements
     elements = []
@@ -198,6 +198,12 @@ def generate_improved_structure_pdf(output_path, root_path, excluded_dirs=None, 
         title = f"Code Collection: {os.path.basename(root_path)}"
 
     elements.append(Paragraph(title, styles['Title']))
+
+    # Add format indicator
+    if machine_format:
+        elements.append(Paragraph("Machine-Readable Format (Compact Size)", styles['Normal']))
+    else:
+        elements.append(Paragraph("Human-Readable Format (Standard Size)", styles['Normal']))
 
     # Add generation timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -385,20 +391,26 @@ def collect_code_files(root_path, code_extensions=None, excluded_dirs=None, excl
         'android': mobile_files['android']
     }
 
-def getSampleStyleTools():
+def getSampleStyleTools(machine_format=False):
     """Create and return a dictionary of styles for the PDF with built-in spacing."""
     styles = getSampleStyleSheet()
 
-    # Add custom styles with built-in spacing - ADJUST VALUES to prevent overflow
+    # Font size adjustments for machine format
+    code_font_size = 3 if machine_format else 8
+    heading_font_size = 4 if machine_format else 10
+    title_font_size = 6 if machine_format else 16
+    normal_font_size = 4 if machine_format else 10
+
+    # Add custom styles with built-in spacing
     if 'Code' not in styles:
         styles.add(ParagraphStyle(
             name='Code',
             fontName='Courier',
-            fontSize=8,
-            leading=10,
+            fontSize=code_font_size,
+            leading=code_font_size+2,  # Adjusted leading for better readability
             alignment=TA_LEFT,
-            spaceAfter=6,  # Reduced from 10
-            spaceBefore=3  # Reduced from 5
+            spaceAfter=2 if machine_format else 6,
+            spaceBefore=1 if machine_format else 3
         ))
 
     if 'Warning' not in styles:
@@ -406,36 +418,45 @@ def getSampleStyleTools():
             name='Warning',
             parent=styles['Normal'],
             textColor='red',
-            spaceBefore=3,  # Reduced from 5
-            spaceAfter=3    # Reduced from 5
+            spaceBefore=1 if machine_format else 3,
+            spaceAfter=1 if machine_format else 3
         ))
 
     if 'Heading4' not in styles:
         styles.add(ParagraphStyle(
             name='Heading4',
             parent=styles['Heading3'],
-            fontSize=10,
-            leading=12,
-            spaceBefore=8,  # Reduced from 10
-            spaceAfter=6    # Reduced from 8
+            fontSize=heading_font_size,
+            leading=heading_font_size+2,
+            spaceBefore=3 if machine_format else 8,
+            spaceAfter=2 if machine_format else 6
         ))
 
-    # Update existing styles to include reasonable spacing
+    # Update existing styles
+    styles['Title'].fontSize = title_font_size
+    styles['Title'].leading = title_font_size+2
     styles['Title'].spaceBefore = 0
-    styles['Title'].spaceAfter = 8  # Reduced from 12
+    styles['Title'].spaceAfter = 3 if machine_format else 8
 
-    styles['Heading2'].spaceBefore = 8  # Reduced from 12
-    styles['Heading2'].spaceAfter = 6   # Reduced from 8
+    styles['Heading2'].fontSize = heading_font_size+2 if machine_format else 14
+    styles['Heading2'].leading = (heading_font_size+2)+2 if machine_format else 16
+    styles['Heading2'].spaceBefore = 3 if machine_format else 8
+    styles['Heading2'].spaceAfter = 2 if machine_format else 6
 
-    styles['Heading3'].spaceBefore = 7  # Reduced from 10
-    styles['Heading3'].spaceAfter = 4   # Reduced from 6
+    styles['Heading3'].fontSize = heading_font_size+1 if machine_format else 12
+    styles['Heading3'].leading = (heading_font_size+1)+2 if machine_format else 14
+    styles['Heading3'].spaceBefore = 2 if machine_format else 7
+    styles['Heading3'].spaceAfter = 1 if machine_format else 4
 
-    styles['Normal'].spaceBefore = 4    # Reduced from 6
-    styles['Normal'].spaceAfter = 4     # Reduced from 6
+    styles['Normal'].fontSize = normal_font_size
+    styles['Normal'].leading = normal_font_size+2
+    styles['Normal'].spaceBefore = 1 if machine_format else 4
+    styles['Normal'].spaceAfter = 1 if machine_format else 4
 
     return styles
 
-def generate_pdf(output_path, root_path, code_files, excluded_dirs=None, max_pdf_size_mb=None, progress_callback=None, pdf_title=None, include_structure=True):
+def generate_pdf(output_path, root_path, code_files, excluded_dirs=None, max_pdf_size_mb=None,
+                progress_callback=None, pdf_title=None, include_structure=True, machine_format=False):
     """
     Generate a PDF containing all the code files with their content.
     If max_pdf_size_mb is specified, split into multiple PDFs to keep each under that size.
@@ -449,15 +470,19 @@ def generate_pdf(output_path, root_path, code_files, excluded_dirs=None, max_pdf
         progress_callback: Callback function for progress updates
         pdf_title: Title for the PDF
         include_structure: Whether to include the project structure in each PDF
+        machine_format: Whether to use machine-readable (smaller) fonts
     """
     if excluded_dirs is None:
         excluded_dirs = COMMON_EXCLUDED_DIRS
 
     if progress_callback:
-        progress_callback(40, "Preparing PDF generation", "Setting up document structure")
+        if machine_format:
+            progress_callback(40, "Preparing machine-readable PDF generation", "Setting up document structure with compact fonts")
+        else:
+            progress_callback(40, "Preparing PDF generation", "Setting up document structure")
 
     # Common elements for all PDFs
-    styles = getSampleStyleTools()
+    styles = getSampleStyleTools(machine_format=machine_format)
 
     # Prepare common header elements - NO SPACERS!
     header_elements = []
@@ -469,6 +494,12 @@ def generate_pdf(output_path, root_path, code_files, excluded_dirs=None, max_pdf
         title = f"Code Collection from {os.path.basename(root_path)}"
 
     header_elements.append(Paragraph(title, styles['Title']))
+
+    # Add format indicator
+    if machine_format:
+        header_elements.append(Paragraph("Machine-Readable Format (Compact Size)", styles['Normal']))
+    else:
+        header_elements.append(Paragraph("Human-Readable Format (Standard Size)", styles['Normal']))
 
     # Add generation timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -483,17 +514,22 @@ def generate_pdf(output_path, root_path, code_files, excluded_dirs=None, max_pdf
     # Check if we should split PDFs
     if max_pdf_size_mb is None or max_pdf_size_mb <= 0:
         # Don't split the PDF, use the single document approach
-        return generate_single_document(output_path, header_elements, code_files, styles, progress_callback)
+        return generate_single_document(output_path, header_elements, code_files, styles,
+                                       progress_callback, machine_format=machine_format)
     else:
         # Split based on size limit
-        return generate_split_documents(output_path, header_elements, code_files, styles, max_pdf_size_mb, progress_callback)
+        return generate_split_documents(output_path, header_elements, code_files, styles,
+                                       max_pdf_size_mb, progress_callback, machine_format=machine_format)
 
-def generate_single_document(output_path, header_elements, code_files, styles, progress_callback=None):
+def generate_single_document(output_path, header_elements, code_files, styles, progress_callback=None, machine_format=False):
     """Generate a single PDF document without splitting and without spacers."""
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Preformatted, KeepTogether, PageBreak
 
     if progress_callback:
-        progress_callback(45, "Creating single PDF", "Preparing content")
+        if machine_format:
+            progress_callback(45, "Creating single machine-readable PDF", "Preparing compact content")
+        else:
+            progress_callback(45, "Creating single PDF", "Preparing content")
 
     # Use a slightly larger bottom margin to avoid "flowable too large" errors
     doc = SimpleDocTemplate(output_path, pagesize=letter, rightMargin=0.5*inch,
@@ -530,7 +566,8 @@ def generate_single_document(output_path, header_elements, code_files, styles, p
 
                     if progress_callback:
                         progress = 45 + int((i / len(regular_files)) * 20)
-                        progress_callback(progress, f"Adding regular file {i+1}/{len(regular_files)}",
+                        format_type = "compact " if machine_format else ""
+                        progress_callback(progress, f"Adding {format_type}regular file {i+1}/{len(regular_files)}",
                                          f"Added: {relative_path}")
                 except Exception as e:
                     logger.error(f"Error processing file {relative_path}: {str(e)}")
@@ -619,14 +656,23 @@ def generate_single_document(output_path, header_elements, code_files, styles, p
 
     # Build the PDF with a try/except block to handle any remaining issues
     if progress_callback:
-        progress_callback(90, "Generating PDF", "Creating final document")
+        if machine_format:
+            progress_callback(90, "Generating compact PDF", "Creating final document with 3px fonts")
+        else:
+            progress_callback(90, "Generating PDF", "Creating final document")
 
     try:
         doc.build(elements)
-        logger.info(f"PDF generated successfully at {output_path}")
+
+        if machine_format:
+            logger.info(f"Machine-readable PDF generated successfully at {output_path}")
+        else:
+            logger.info(f"Human-readable PDF generated successfully at {output_path}")
 
         if progress_callback:
-            progress_callback(100, "PDF generated successfully", f"Output saved to: {os.path.basename(output_path)}")
+            format_type = "Machine-readable" if machine_format else "Human-readable"
+            progress_callback(100, f"{format_type} PDF generated successfully",
+                             f"Output saved to: {os.path.basename(output_path)}")
 
         return output_path
     except Exception as e:
@@ -803,7 +849,8 @@ def _generate_split_pdfs(output_path, header_elements, code_files, styles, max_p
 
     return output_files
 
-def generate_split_documents(output_path, header_elements, code_files, styles, max_pdf_size_mb, progress_callback=None):
+def generate_split_documents(output_path, header_elements, code_files, styles, max_pdf_size_mb,
+                            progress_callback=None, machine_format=False):
     """Generate split PDF documents based on categorization."""
     # Check if we have categorized files (dictionary) or just a flat list
     if isinstance(code_files, dict):
@@ -815,23 +862,23 @@ def generate_split_documents(output_path, header_elements, code_files, styles, m
         # Always create multiple PDFs with the specified size limit
         return _generate_split_pdfs_with_categories(
             output_path, header_elements, regular_files, ios_files, android_files,
-            styles, max_pdf_size_mb, progress_callback
+            styles, max_pdf_size_mb, progress_callback, machine_format=machine_format
         )
     else:
         # Legacy support for flat list of files
-        return _generate_split_pdfs(output_path, header_elements, code_files, styles, max_pdf_size_mb, progress_callback)
+        return _generate_split_pdfs(output_path, header_elements, code_files, styles, max_pdf_size_mb,
+                                   progress_callback, machine_format=machine_format)
 
-# Find this function in _generate_split_pdfs_with_categories
-# It's creating headers for each category PDF
-# REMOVE the project structure section from header elements
 
-def _generate_split_pdfs_with_categories(output_path, header_elements, regular_files, ios_files, android_files, styles, max_pdf_size_mb, progress_callback=None):
+def _generate_split_pdfs_with_categories(output_path, header_elements, regular_files, ios_files, android_files,
+                                        styles, max_pdf_size_mb, progress_callback=None, machine_format=False):
     """Generate multiple PDFs, each under the specified size limit, with categorized files."""
     from reportlab.pdfgen import canvas
     import os.path
 
     if progress_callback:
-        progress_callback(45, "Preparing split PDFs", "Calculating file sizes")
+        format_type = "compact " if machine_format else ""
+        progress_callback(45, f"Preparing split {format_type}PDFs", "Calculating file sizes")
 
     # IMPORTANT FIX: Convert MB to bytes correctly and log the value
     # Use proper conversion: 1 MB = 1,048,576 bytes
@@ -839,7 +886,8 @@ def _generate_split_pdfs_with_categories(output_path, header_elements, regular_f
 
     # Add explicit logging of target size
     if progress_callback:
-        progress_callback(None, None, f"Target PDF size: {max_pdf_size_mb} MB = {max_size_bytes} bytes", "info")
+        format_type = "Machine-readable" if machine_format else "Human-readable"
+        progress_callback(None, None, f"Target {format_type} PDF size: {max_pdf_size_mb} MB = {max_size_bytes} bytes", "info")
 
     # Prepare output paths
     base_name, ext = os.path.splitext(output_path)
@@ -848,18 +896,19 @@ def _generate_split_pdfs_with_categories(output_path, header_elements, regular_f
     # Create separate PDFs for each category
     # 1. Regular files
     if regular_files:
-        regular_pdf = f"{base_name}_regular{ext}"
-        doc = SimpleDocTemplate(regular_pdf, pagesize=letter, rightMargin=0.5*inch,
-                               leftMargin=0.5*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        # Add format indicator to filename if machine format
+        format_indicator = "_machine" if machine_format else ""
+        regular_pdf = f"{base_name}_regular{format_indicator}{ext}"
 
         # IMPORTANT FIX: Create new minimal header WITHOUT the project structure
         # Just keep title and timestamp, remove the structure part
         elements = []
         for element in header_elements:
-            # Only copy the Title and timestamp paragraphs, skip the project structure
+            # Only copy the Title, format indicator, and timestamp paragraphs, skip the project structure
             if isinstance(element, Paragraph) and (
                 element.text.startswith("Code Collection") or
-                element.text.startswith("Generated on")
+                element.text.startswith("Generated on") or
+                "Format" in element.text
             ):
                 elements.append(element)
 
@@ -870,25 +919,26 @@ def _generate_split_pdfs_with_categories(output_path, header_elements, regular_f
         regular_pdfs = _split_category_files(
             regular_pdf, elements, regular_files, styles, max_size_bytes,
             progress_callback, progress_start=45, progress_range=20,
-            category="Regular"
+            category="Regular", machine_format=machine_format
         )
 
         output_files.extend(regular_pdfs)
 
     # 2. iOS files
     if ios_files:
-        ios_pdf = f"{base_name}_ios{ext}"
-        doc = SimpleDocTemplate(ios_pdf, pagesize=letter, rightMargin=0.5*inch,
-                               leftMargin=0.5*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        # Add format indicator to filename if machine format
+        format_indicator = "_machine" if machine_format else ""
+        ios_pdf = f"{base_name}_ios{format_indicator}{ext}"
 
         # IMPORTANT FIX: Create new minimal header WITHOUT the project structure
         # Just keep title and timestamp, remove the structure part
         elements = []
         for element in header_elements:
-            # Only copy the Title and timestamp paragraphs, skip the project structure
+            # Only copy the Title, format indicator, and timestamp paragraphs, skip the project structure
             if isinstance(element, Paragraph) and (
                 element.text.startswith("Code Collection") or
-                element.text.startswith("Generated on")
+                element.text.startswith("Generated on") or
+                "Format" in element.text
             ):
                 elements.append(element)
 
@@ -899,25 +949,26 @@ def _generate_split_pdfs_with_categories(output_path, header_elements, regular_f
         ios_pdfs = _split_category_files(
             ios_pdf, elements, ios_files, styles, max_size_bytes,
             progress_callback, progress_start=65, progress_range=15,
-            category="iOS"
+            category="iOS", machine_format=machine_format
         )
 
         output_files.extend(ios_pdfs)
 
     # 3. Android files
     if android_files:
-        android_pdf = f"{base_name}_android{ext}"
-        doc = SimpleDocTemplate(android_pdf, pagesize=letter, rightMargin=0.5*inch,
-                               leftMargin=0.5*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        # Add format indicator to filename if machine format
+        format_indicator = "_machine" if machine_format else ""
+        android_pdf = f"{base_name}_android{format_indicator}{ext}"
 
         # IMPORTANT FIX: Create new minimal header WITHOUT the project structure
         # Just keep title and timestamp, remove the structure part
         elements = []
         for element in header_elements:
-            # Only copy the Title and timestamp paragraphs, skip the project structure
+            # Only copy the Title, format indicator, and timestamp paragraphs, skip the project structure
             if isinstance(element, Paragraph) and (
                 element.text.startswith("Code Collection") or
-                element.text.startswith("Generated on")
+                element.text.startswith("Generated on") or
+                "Format" in element.text
             ):
                 elements.append(element)
 
@@ -927,31 +978,34 @@ def _generate_split_pdfs_with_categories(output_path, header_elements, regular_f
         # Split Android files if needed
         android_pdfs = _split_category_files(
             android_pdf, elements, android_files, styles, max_size_bytes,
-            progress_callback, progress_start=80, progress_range=10,
-            category="Android"
+            progress_callback, progress_start=80, progress_range=15,
+            category="Android", machine_format=machine_format
         )
 
         output_files.extend(android_pdfs)
 
     if progress_callback:
-        progress_callback(100, "PDF generation complete", f"Created {len(output_files)} PDF files")
+        format_type = "machine-readable" if machine_format else "human-readable"
+        progress_callback(100, "PDF generation complete", f"Created {len(output_files)} {format_type} PDF files")
 
     return output_files
 
-def _split_category_files(base_output, header_elements, files, styles, max_size_bytes, progress_callback=None, progress_start=0, progress_range=100, category=""):
+def _split_category_files(base_output, header_elements, files, styles, max_size_bytes, progress_callback=None,
+                          progress_start=0, progress_range=100, category="", machine_format=False):
     """Split a category of files into multiple PDFs based on size limit - NO SPACERS."""
     from reportlab.platypus import PageBreak, KeepTogether
     from reportlab.lib.styles import ParagraphStyle
 
     # Create a modified Code style with minimal spacing
+    code_font_size = 3 if machine_format else 8
     compact_code_style = ParagraphStyle(
         name='CompactCode',
         fontName='Courier',
-        fontSize=8,
-        leading=10,
+        fontSize=code_font_size,
+        leading=code_font_size+2,
         alignment=TA_LEFT,
-        spaceAfter=3,    # Reduced from 5
-        spaceBefore=1    # Reduced from 2
+        spaceAfter=1 if machine_format else 3,
+        spaceBefore=0 if machine_format else 1
     )
 
     output_files = []
@@ -974,6 +1028,14 @@ def _split_category_files(base_output, header_elements, files, styles, max_size_
 
     # Process all files
     total_files = len(files)
+    processed_files = 0
+
+    if total_files == 0:
+        if progress_callback:
+            progress_callback(progress_start + progress_range, f"No {category} files to process",
+                            f"Skipping {category} category: no files found")
+        return output_files
+
     for i, (relative_path, filepath) in enumerate(files):
         try:
             # Try to read the file content
@@ -995,7 +1057,8 @@ def _split_category_files(base_output, header_elements, files, styles, max_size_
                 # Build current PDF
                 if progress_callback:
                     current_progress = progress_start + int((i / total_files) * progress_range)
-                    progress_callback(current_progress, f"Creating {category} PDF part {current_part}",
+                    format_type = "compact " if machine_format else ""
+                    progress_callback(current_progress, f"Creating {format_type}{category} PDF part {current_part}",
                                     f"Finalizing part {current_part}")
 
                 try:
@@ -1037,10 +1100,12 @@ def _split_category_files(base_output, header_elements, files, styles, max_size_
 
             # Update size estimation
             estimated_size += file_contribution
+            processed_files += 1
 
             if progress_callback:
                 current_progress = progress_start + int((i / total_files) * progress_range)
-                progress_callback(current_progress, f"Processing {category} files ({i+1}/{total_files})",
+                format_type = "compact " if machine_format else ""
+                progress_callback(current_progress, f"Processing {format_type}{category} files ({i+1}/{total_files})",
                                 f"Added to part {current_part}: {relative_path}")
 
             logger.info(f"Added file: {relative_path} to {category} part {current_part}")
@@ -1052,12 +1117,14 @@ def _split_category_files(base_output, header_elements, files, styles, max_size_
             if progress_callback:
                 progress_callback(None, None, f"Error with file: {relative_path}", "warning")
 
-    # Build final PDF if there are elements
+    # Build final PDF if there are elements beyond just the headers
     if len(current_elements) > len(header_elements) + 1:
         if progress_callback:
-            progress_callback(progress_start + progress_range - 5,
-                             f"Finalizing {category} PDF part {current_part}",
-                             "Creating final document")
+            # Calculate final progress correctly
+            current_progress = progress_start + progress_range - 5
+            format_type = "compact " if machine_format else ""
+            progress_callback(current_progress, f"Creating {format_type}{category} PDF part {current_part}",
+                            f"Finalizing part {current_part}")
 
         try:
             doc.build(current_elements)
@@ -1083,6 +1150,12 @@ def _split_category_files(base_output, header_elements, files, styles, max_size_
                 progress_callback(None, None, f"Renamed to: {os.path.basename(new_output)}")
         except Exception as e:
             logger.error(f"Error renaming output file: {str(e)}")
+
+    if progress_callback:
+        format_type = "machine-readable" if machine_format else "human-readable"
+        progress_callback(progress_start + progress_range,
+                        f"{category} PDF generation complete",
+                        f"Created {len(output_files)} {format_type} {category} PDF file(s) with {processed_files} code files")
 
     return output_files
 
@@ -1372,6 +1445,9 @@ def upload_async():
         # Always split at 390KB
         max_pdf_size_mb = 0.39  # 390KB
 
+    # Get output format preference (new feature)
+    machine_format = request.form.get('output_format', 'human') == 'machine'
+
     # Get selected file categories
     include_categories = request.form.getlist('include_categories')
     # Default to all categories if none selected
@@ -1389,13 +1465,17 @@ def upload_async():
 
     # Get base filename without .zip extension for PDF output
     pdf_basename = os.path.splitext(zip_filename)[0]
-    pdf_filename = f"{pdf_basename}_code.pdf"
+
+    # Add format indicator to filename if machine format
+    format_indicator = "_machine" if machine_format else ""
+    pdf_filename = f"{pdf_basename}_code{format_indicator}.pdf"
     pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], pdf_filename)
 
     # Create a dictionary for additional parameters - this way we can add parameters without
     # having to update function signatures everywhere
     process_params = {
-        'include_categories': include_categories
+        'include_categories': include_categories,
+        'machine_format': machine_format  # Pass the new parameter
     }
 
     # Start background processing thread with all data it needs
@@ -1664,10 +1744,20 @@ def process_project_async_worker(zip_path, output_path, extract_dir, excluded_di
     # Get include_categories from kwargs or use default
     include_categories = kwargs.get('include_categories', ['regular', 'ios', 'android'])
 
+    # Get machine_format from kwargs (new feature)
+    machine_format = kwargs.get('machine_format', False)
+
     # Clear previous log history
     all_log_messages = []
 
     try:
+        # Log the format choice
+        if machine_format:
+            add_progress_update(None, None, "Using machine-readable format with compact 3px fonts", "info")
+            add_progress_update(None, None, "This format saves significant file space but may be harder to read", "info")
+        else:
+            add_progress_update(None, None, "Using standard human-readable format", "info")
+
         # Extract the zip file
         import zipfile
         add_progress_update(5, "Extracting ZIP file", "Unpacking project files...")
@@ -1711,6 +1801,7 @@ def process_project_async_worker(zip_path, output_path, extract_dir, excluded_di
             progress_callback=add_progress_update
         )
 
+        # Filter categories based on user selection
         filtered_categories = {}
         if 'regular' in include_categories:
             filtered_categories['regular'] = file_categories['regular']
@@ -1744,16 +1835,21 @@ def process_project_async_worker(zip_path, output_path, extract_dir, excluded_di
 
         # First, generate the structure-only PDF with clear naming
         base_path, ext = os.path.splitext(output_path)
-        structure_pdf_path = f"{base_path}_structure{ext}"
 
-        add_progress_update(40, "Generating structure PDF", "Creating project structure document")
+        # Add format indicator to structure filename if machine format
+        format_indicator = "_machine" if machine_format else ""
+        structure_pdf_path = f"{base_path}_structure{format_indicator}{ext}"
 
-        # Generate the structure PDF with explicit logging
+        add_progress_update(40, "Generating structure PDF",
+                           f"Creating project structure document with {'compact' if machine_format else 'standard'} fonts")
+
+        # Generate the structure PDF with explicit logging and machine format parameter
         structure_pdf = generate_improved_structure_pdf(
             structure_pdf_path,
             project_dir,
             excluded_dirs=excluded_dirs,
-            pdf_title=pdf_title
+            pdf_title=pdf_title,
+            machine_format=machine_format  # Pass the machine format parameter
         )
 
         if not structure_pdf:
@@ -1763,27 +1859,31 @@ def process_project_async_worker(zip_path, output_path, extract_dir, excluded_di
             # Verify the file exists and log its properties
             if os.path.exists(structure_pdf):
                 file_size = os.path.getsize(structure_pdf)
-                add_progress_update(None, None, f"Structure PDF generated: {os.path.basename(structure_pdf)} (Size: {file_size} bytes)")
+                format_type = "machine-readable" if machine_format else "human-readable"
+                add_progress_update(None, None,
+                                  f"{format_type.capitalize()} structure PDF generated: {os.path.basename(structure_pdf)} (Size: {file_size/1024:.2f} KB)")
                 structure_exists = True
             else:
                 add_progress_update(None, None, "Structure PDF path returned but file not found", "warning")
                 structure_exists = False
 
         # Then generate the code PDFs without the structure
-        add_progress_update(50, "Generating code PDFs", "Creating code file documents")
+        format_type = "compact " if machine_format else ""
+        add_progress_update(50, f"Generating {format_type}code PDFs", "Creating code file documents")
 
         # Try to generate PDF without structure
         pdf_success = True
         try:
-            # Generate PDF with progress updates and categorized files
+            # Generate PDF with progress updates, categorized files, and machine format parameter
             output_files = generate_pdf(
                 output_path,
                 project_dir,
-                filtered_categories,  # <- Use filtered_categories instead
+                filtered_categories,
                 excluded_dirs=excluded_dirs,
                 max_pdf_size_mb=max_pdf_size,
                 progress_callback=add_progress_update,
-                pdf_title=pdf_title
+                pdf_title=pdf_title,
+                machine_format=machine_format  # Pass the machine format parameter
             )
         except Exception as e:
             logger.error(f"PDF generation failed completely: {str(e)}")
@@ -1842,18 +1942,22 @@ def process_project_async_worker(zip_path, output_path, extract_dir, excluded_di
             # Create zip file for multiple PDFs
             import zipfile
 
-            # Use project name from zip file
+            # Use project name from zip file with format indicator
             zip_basename = os.path.splitext(zip_filename)[0] if zip_filename else "code_collection"
-            zip_filename_output = f'{zip_basename}_pdfs.zip'
+            format_indicator = "_machine" if machine_format else ""
+            zip_filename_output = f'{zip_basename}_pdfs{format_indicator}.zip'
             zip_path = os.path.join(os.path.dirname(output_path), zip_filename_output)
 
             # Log all files being added to ZIP
             add_progress_update(None, None, f"Preparing to add {len(output_files)} files to ZIP:", "info")
+
+            total_size = 0
             for i, pdf_file in enumerate(output_files):
                 file_exists = os.path.exists(pdf_file)
                 file_size = os.path.getsize(pdf_file) if file_exists else 0
+                total_size += file_size
                 add_progress_update(None, None,
-                                  f"File {i+1}: {os.path.basename(pdf_file)} - Exists: {file_exists}, Size: {file_size} bytes",
+                                  f"File {i+1}: {os.path.basename(pdf_file)} - Exists: {file_exists}, Size: {file_size/1024:.2f} KB",
                                   "info" if file_exists else "warning")
 
             # Create the ZIP file with all PDFs
@@ -1862,16 +1966,21 @@ def process_project_async_worker(zip_path, output_path, extract_dir, excluded_di
                     if os.path.exists(pdf_file):
                         arcname = os.path.basename(pdf_file)
                         zipf.write(pdf_file, arcname)
-                        add_progress_update(None, None, f"Added to ZIP: {arcname} (Size: {os.path.getsize(pdf_file)} bytes)")
+                        add_progress_update(None, None, f"Added to ZIP: {arcname} (Size: {os.path.getsize(pdf_file)/1024:.2f} KB)")
                     else:
                         add_progress_update(None, None, f"Could not add to ZIP - file not found: {pdf_file}", "warning")
 
             # Verify the zip file contents
             with zipfile.ZipFile(zip_path, 'r') as zipf:
                 zip_contents = zipf.namelist()
+                zip_size = os.path.getsize(zip_path)
                 add_progress_update(None, None, f"ZIP file contains {len(zip_contents)} files: {', '.join(zip_contents)}")
+                add_progress_update(None, None, f"ZIP file size: {zip_size/1024:.2f} KB (Original PDFs: {total_size/1024:.2f} KB)")
+                if machine_format:
+                    add_progress_update(None, None, "Using machine format saved significant file space!", "info")
 
-            add_progress_update(None, None, f"Created ZIP archive with {len(output_files)} PDF files")
+            format_type = "machine-readable" if machine_format else "human-readable"
+            add_progress_update(None, None, f"Created ZIP archive with {len(output_files)} {format_type} PDF files")
             download_url = f"/download?filename={zip_filename_output}&task_id={task_id}"
 
             # Save download file path with task_id in app config
@@ -1891,7 +2000,8 @@ def process_project_async_worker(zip_path, output_path, extract_dir, excluded_di
             # Verify file exists
             if os.path.exists(download_path):
                 file_size = os.path.getsize(download_path)
-                add_progress_update(None, None, f"Single PDF download: {filename} (Size: {file_size} bytes)")
+                format_type = "machine-readable" if machine_format else "human-readable"
+                add_progress_update(None, None, f"Single {format_type} PDF ready: {filename} (Size: {file_size/1024:.2f} KB)")
             else:
                 add_progress_update(None, None, f"Warning: Download file not found: {download_path}", "warning")
 
@@ -1903,7 +2013,9 @@ def process_project_async_worker(zip_path, output_path, extract_dir, excluded_di
                     app.download_files = {}
                 app.download_files[task_id] = download_path
 
-        add_progress_update(100, "Processing complete", "Files ready for download", complete=True, download_url=download_url)
+        format_type = "machine-readable" if machine_format else "human-readable"
+        add_progress_update(100, "Processing complete", f"{format_type.capitalize()} files ready for download",
+                          complete=True, download_url=download_url)
 
     except Exception as e:
         logger.error(f"Error in background processing: {str(e)}")
