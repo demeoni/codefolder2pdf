@@ -352,3 +352,29 @@ footer {
     background-repeat: no-repeat;
     vertical-align: middle;
 }
+
+/* New styles for displaying excluded directories */
+.exclusions-info {
+    background-color: #f8f9fa;
+    padding: 12px 15px;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+    margin-bottom: 15px;
+}
+
+.exclusions-info p {
+    margin: 0 0 8px 0;
+    font-weight: 500;
+    color: #495057;
+}
+
+.excluded-dirs-display {
+    background-color: #e9ecef;
+    padding: 10px 12px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    color: #495057;
+    line-height: 1.5;
+    word-wrap: break-word;
+}

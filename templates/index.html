@@ -36,51 +36,16 @@
             </div>
 
             <div class="form-group">
-                <label>Excluded Directories:</label>
-                <div class="checkbox-container">
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="exclude_git" name="exclude_dirs" value=".git" checked>
-                        <label for="exclude_git">.git</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="exclude_node_modules" name="exclude_dirs" value="node_modules" checked>
-                        <label for="exclude_node_modules">node_modules</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="exclude_pycache" name="exclude_dirs" value="__pycache__" checked>
-                        <label for="exclude_pycache">__pycache__</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="exclude_venv" name="exclude_dirs" value="venv" checked>
-                        <label for="exclude_venv">venv</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="exclude_env" name="exclude_dirs" value="env" checked>
-                        <label for="exclude_env">env</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="exclude_dotenv" name="exclude_dirs" value=".env" checked>
-                        <label for="exclude_dotenv">.env</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="exclude_dotvenv" name="exclude_dirs" value=".venv" checked>
-                        <label for="exclude_dotvenv">.venv</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="exclude_dist" name="exclude_dirs" value="dist" checked>
-                        <label for="exclude_dist">dist</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="exclude_build" name="exclude_dirs" value="build" checked>
-                        <label for="exclude_build">build</label>
-                    </div>
-                    <div class="checkbox-item">
-                        <input type="checkbox" id="exclude_macosx" name="exclude_dirs" value="__MACOSX" checked>
-                        <label for="exclude_macosx">__MACOSX</label>
+                <label>Directory Exclusions:</label>
+                <div class="exclusions-info">
+                    <p>The following directories are automatically excluded:</p>
+                    <div class="excluded-dirs-display">
+                        .git, node_modules, __pycache__, venv, env, .venv, .env, dist, build, obj, bin,
+                        __MACOSX, .trash, .expo, .gradle, ios/Pods, Pods, vendor, coverage, .next, .nuxt, and more
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="custom_excluded_dirs">Additional excluded directories (comma-separated):</label>
+                    <label for="custom_excluded_dirs">Additional directories to exclude (comma-separated):</label>
                     <input type="text" id="custom_excluded_dirs" name="custom_excluded_dirs" placeholder="bin,obj,tmp">
                 </div>
             </div>

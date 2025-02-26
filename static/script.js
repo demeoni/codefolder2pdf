@@ -26,11 +26,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const file = e.target.files[0];
             if (!file) return;
 
-            // Auto-detect directories in the ZIP file
+            // Auto-detect directories in the ZIP file - still useful for internal processing
             try {
                 const statusDiv = document.createElement('div');
                 statusDiv.className = 'directory-scan-status';
-                statusDiv.textContent = 'Scanning ZIP file for directories...';
+                statusDiv.textContent = 'Scanning ZIP file...';
                 fileInput.parentNode.appendChild(statusDiv);
 
                 // Create a FormData object to send the file
@@ -51,23 +51,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else {
                     const foundDirs = data.detected_dirs || [];
 
-                    // First uncheck all checkboxes
-                    document.querySelectorAll('input[name="exclude_dirs"]').forEach(checkbox => {
-                        checkbox.checked = false;
-                    });
-
-                    // Then check only those that were found
-                    for (const dir of foundDirs) {
-                        const checkbox = document.querySelector(`input[value="${dir}"]`);
-                        if (checkbox) {
-                            checkbox.checked = true;
-                        }
-                    }
-
                     if (foundDirs.length > 0) {
-                        statusDiv.textContent = 'Found directories: ' + foundDirs.join(', ');
+                        statusDiv.textContent = 'Scan complete. Found ' + foundDirs.length + ' directories.';
                     } else {
-                        statusDiv.textContent = 'No common directories found to exclude.';
+                        statusDiv.textContent = 'Scan complete. No common directories found.';
                     }
                 }
 
@@ -80,52 +67,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-
-    // Helper function for checkbox selections
-    const toggleAllCheckboxes = (checked) => {
-        const checkboxes = document.querySelectorAll('input[name="exclude_dirs"]');
-        checkboxes.forEach(checkbox => {
-            checkbox.checked = checked;
-        });
-    };
-
-    // Add a select all / deselect all option EXACTLY ONCE
-    const checkboxContainer = document.querySelector('.checkbox-container');
-    const existingButtons = document.querySelectorAll('.select-buttons');
-
-    // Remove any existing buttons before adding new ones
-    existingButtons.forEach(button => button.remove());
-
-    if (checkboxContainer && existingButtons.length === 0) {
-        // Create new select/deselect buttons
-        const selectAllDiv = document.createElement('div');
-        selectAllDiv.className = 'select-buttons';
-        selectAllDiv.innerHTML = `
-            <button type="button" id="select-all" style="margin-right: 15px; padding: 8px 15px;">Select All</button>
-            <button type="button" id="deselect-all" style="padding: 8px 15px;">Deselect All</button>
-        `;
-
-        // Insert at the beginning of the container
-        if (checkboxContainer.firstChild) {
-            checkboxContainer.insertBefore(selectAllDiv, checkboxContainer.firstChild);
-        } else {
-            checkboxContainer.appendChild(selectAllDiv);
-        }
-
-        // Add event listeners to the buttons
-        document.getElementById('select-all').addEventListener('click', function(e) {
-            e.preventDefault();
-            toggleAllCheckboxes(true);
-        });
-
-        document.getElementById('deselect-all').addEventListener('click', function(e) {
-            e.preventDefault();
-            toggleAllCheckboxes(false);
-        });
-    }
-
-    // Split PDF toggle script to update
-    // Find this section in script.js and replace it
 
     // Split PDF toggle
     const splitPdfCheckbox = document.getElementById('split_pdf');
@@ -147,8 +88,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-
-    // Add this to the script.js file after the splitPdfCheckbox event listener
 
     // Category include/exclude toggles
     const categoryCheckboxes = document.querySelectorAll('input[name="include_categories"]');
@@ -278,72 +217,6 @@ document.addEventListener('DOMContentLoaded', function() {
         terminalOutput.after(logButtonContainer);
     }
 
-    // Update the SSE onmessage handler to include logs_url
-    const form = document.querySelector('form');
-    if (form) {
-        form.addEventListener('submit', function(e) {
-            // ... existing code here ...
-
-            // Update the eventSource.onmessage handler
-            eventSource.onmessage = function(event) {
-                const data = JSON.parse(event.data);
-
-                // Ignore ping messages
-                if (data.ping) return;
-
-                if (data.progress !== undefined) {
-                    // Update progress bar
-                    progressBar.style.width = data.progress + '%';
-                }
-
-                if (data.message) {
-                    progressText.textContent = data.message;
-                }
-
-                if (data.log) {
-                    // Add log to terminal
-                    addTerminalLine(data.log, data.type || 'info');
-                }
-
-                // If process is complete, close connection and show download buttons
-                if (data.complete) {
-                    eventSource.close();
-                    addTerminalLine('Processing complete!', 'info');
-
-                    // Handle download buttons
-                    if (data.download_url) {
-                        // Create download button for output files
-                        const downloadContainer = document.createElement('div');
-                        downloadContainer.className = 'download-container';
-                        downloadContainer.innerHTML = `
-                            <a href="${data.download_url}" class="download-button">
-                                <i class="download-icon"></i>
-                                Download Files
-                            </a>
-                            <p class="download-note">Your files are ready for download</p>
-                        `;
-                        document.querySelector('.progress-container').after(downloadContainer);
-
-                        addTerminalLine('Download button added. Click to download your files.', 'info');
-
-                        // Auto-download after a delay
-                        setTimeout(() => {
-                            window.location.href = data.download_url;
-                            addTerminalLine('Auto-downloading files...', 'info');
-                        }, 2000);
-                    }
-
-                    // Add log download button if logs are available
-                    if (data.logs_url) {
-                        addLogDownloadButton(data.logs_url);
-                        addTerminalLine('Log file available for download.', 'info');
-                    }
-                }
-            };
-        });
-    }
-});
-
     // Form submission with progress tracking
     const form = document.querySelector('form');
     if (form) {
@@ -405,19 +278,20 @@ document.addEventListener('DOMContentLoaded', function() {
                         addTerminalLine(data.log, data.type || 'info');
                     }
 
-                    // If process is complete, close connection and download the file
+                    // If process is complete, close connection and show download buttons
                     if (data.complete) {
                         eventSource.close();
                         addTerminalLine('Processing complete!', 'info');
 
-                        // Create download button
+                        // Handle download buttons
                         if (data.download_url) {
+                            // Create download button for output files
                             const downloadContainer = document.createElement('div');
                             downloadContainer.className = 'download-container';
                             downloadContainer.innerHTML = `
                                 <a href="${data.download_url}" class="download-button">
                                     <i class="download-icon"></i>
-                                    Download PDF
+                                    Download Files
                                 </a>
                                 <p class="download-note">Your files are ready for download</p>
                             `;
@@ -428,8 +302,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             // Auto-download after a delay
                             setTimeout(() => {
                                 window.location.href = data.download_url;
-                                addTerminalLine('Auto-downloading file...', 'info');
+                                addTerminalLine('Auto-downloading files...', 'info');
                             }, 2000);
+                        }
+
+                        // Add log download button if logs are available
+                        if (data.logs_url) {
+                            addLogDownloadButton(data.logs_url);
+                            addTerminalLine('Log file available for download.', 'info');
                         }
                     }
                 };
@@ -444,6 +324,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
+});
 
 // Function to add a line to the terminal output
 function addTerminalLine(text, type = 'info') {

@@ -45,7 +45,7 @@ COMMON_EXCLUDED_DIRS = [
     '__MACOSX', '.trash', '.expo', '.gradle', 'gradle' 'Images.xcassets', 'android/app/src', 'Local Podspecs',
     'libs', 'jniLibs', 'intermediates', 'generated', 'outputs', 'tmp', 'temp', 'captures',
     'release', 'debug', 'caches', 'xcuserdata', 'xcshareddata', 'DerivedData',
-    'Classes', 'Frameworks', 'Headers', 'PrivateHeaders', 'buildSrc',
+    'Classes', 'Frameworks', 'Headers', 'PrivateHeaders', 'buildSrc', 'log', 'logs'
 
     # Add these additional directories that are typically very large
     'node_modules',  # Explicitly add again to ensure it's included
@@ -200,7 +200,7 @@ def collect_code_files(root_path, code_extensions=None, excluded_dirs=None, excl
     processed_files = 0
 
     # Paths that identify mobile files
-    ios_patterns = ['ios/', '.xcodeproj/', '.xcworkspace/', '.pbxproj', '.storyboard', '.xib', '.swift']
+    ios_patterns = ['ios/', '.xcodeproj/', '.xcworkspace/', '.pbxproj', '.storyboard', '.xib', '.swift', 'Images.xcassets/', '.h']
     android_patterns = ['android/', 'gradle/', '.gradle', '.xml', 'AndroidManifest.xml', '.properties']
 
     # First, count total files for progress reporting
@@ -1290,18 +1290,14 @@ def upload_async():
     # Generate a unique task ID
     current_task_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(os.urandom(4).hex())
 
-    # Get excluded directories from form checkboxes
-    excluded_dirs = request.form.getlist('exclude_dirs')
+    # Set up the excluded directories list
+    # Instead of getting from form checkboxes, we now always use the COMMON_EXCLUDED_DIRS
+    excluded_dirs = COMMON_EXCLUDED_DIRS.copy()
 
     # Add custom excluded directories
     custom_excluded = request.form.get('custom_excluded_dirs', '').split(',')
     custom_excluded = [d.strip() for d in custom_excluded if d.strip()]
     excluded_dirs.extend(custom_excluded)
-
-    # Add in the common excluded directories from our constant
-    for dir_name in COMMON_EXCLUDED_DIRS:
-        if dir_name not in excluded_dirs:
-            excluded_dirs.append(dir_name)
 
     # Get max PDF size if provided
     max_pdf_size_mb = None
