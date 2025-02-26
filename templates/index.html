@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Collector</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Code Collector</h1>
+        <p>Upload a project folder (as a ZIP file) to generate a set of PDF files containing all the code with a separate structure PDF for easy navigation.</p>
+
+        <div class="info-box">
+            <h3>Key Features</h3>
+            <ul>
+                <li>Creates a dedicated PDF with the complete project structure</li>
+                <li>Generates separate PDFs for code files, organized by category</li>
+                <li>Automatically excludes common non-code directories and build artifacts</li>
+                <li>Optimizes PDF files for better readability</li>
+                <li>Handles large projects efficiently</li>
+            </ul>
+        </div>
+
+        {% if error %}
+        <div class="error">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <form action="/upload-async" method="post" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="project_zip">Project ZIP File:</label>
+                <input type="file" id="project_zip" name="project_zip" accept=".zip" required>
+                <small>Maximum size: 750MB</small>
+            </div>
+
+            <div class="form-group">
+                <label>Excluded Directories:</label>
+                <div class="checkbox-container">
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="exclude_git" name="exclude_dirs" value=".git" checked>
+                        <label for="exclude_git">.git</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="exclude_node_modules" name="exclude_dirs" value="node_modules" checked>
+                        <label for="exclude_node_modules">node_modules</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="exclude_pycache" name="exclude_dirs" value="__pycache__" checked>
+                        <label for="exclude_pycache">__pycache__</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="exclude_venv" name="exclude_dirs" value="venv" checked>
+                        <label for="exclude_venv">venv</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="exclude_env" name="exclude_dirs" value="env" checked>
+                        <label for="exclude_env">env</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="exclude_dotenv" name="exclude_dirs" value=".env" checked>
+                        <label for="exclude_dotenv">.env</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="exclude_dotvenv" name="exclude_dirs" value=".venv" checked>
+                        <label for="exclude_dotvenv">.venv</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="exclude_dist" name="exclude_dirs" value="dist" checked>
+                        <label for="exclude_dist">dist</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="exclude_build" name="exclude_dirs" value="build" checked>
+                        <label for="exclude_build">build</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="exclude_macosx" name="exclude_dirs" value="__MACOSX" checked>
+                        <label for="exclude_macosx">__MACOSX</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="custom_excluded_dirs">Additional excluded directories (comma-separated):</label>
+                    <input type="text" id="custom_excluded_dirs" name="custom_excluded_dirs" placeholder="bin,obj,tmp">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>PDF Generation Options:</label>
+                <div class="split-container">
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="split_pdf" name="split_pdf" checked>
+                        <label for="split_pdf">Split into Multiple PDFs</label>
+                    </div>
+                    <div id="split_options" style="margin-top: 10px;">
+                        <label for="max_pdf_size">Maximum PDF size:</label>
+                        <select id="max_pdf_size" name="max_pdf_size" class="form-control" style="width: auto; display: inline-block;">
+                            <option value="0.39">0.39 MB (390 KB)</option>
+                            <option value="0.4">0.4 MB (400 KB)</option>
+                            <option value="0.75">0.75 MB (750 KB)</option>
+                            <option value="1">1 MB (1,024 KB)</option>
+                        </select>
+                        <p><small>PDFs larger than this will be split into multiple files. The default setting (390KB) works well for most projects.</small></p>
+                    </div>
+
+                    <div style="margin-top: 15px; border-top: 1px solid #e9ecef; padding-top: 15px;">
+                        <label>Include File Categories:</label>
+                        <div class="checkbox-container" style="margin-top: 10px;">
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="include_regular" name="include_categories" value="regular" checked>
+                                <label for="include_regular">Regular Code Files</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="include_ios" name="include_categories" value="ios" checked>
+                                <label for="include_ios">iOS Code Files</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="include_android" name="include_categories" value="android" checked>
+                                <label for="include_android">Android Code Files</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-box" style="background-color: #e8f5e9; border-left-color: #4caf50;">
+                <h3>How Files Are Processed</h3>
+                <ul>
+                    <li><strong>Project Structure:</strong> A dedicated PDF with the complete folder structure</li>
+                    <li><strong>Regular Code Files:</strong> Your application's source code</li>
+                    <li><strong>iOS Code Files:</strong> iOS-specific code detected in your project</li>
+                    <li><strong>Android Code Files:</strong> Android-specific code detected in your project</li>
+                </ul>
+                <p><strong>Note:</strong> Large files like package-lock.json, node_modules, and build artifacts are automatically excluded.</p>
+            </div>
+
+            <button type="submit">Generate PDFs</button>
+        </form>
+
+        <!-- Progress bar and terminal output -->
+        <div class="progress-container" id="progress-container">
+            <div class="progress">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+            <div class="progress-text" id="progress-text">Processing files...</div>
+        </div>
+
+        <div class="terminal-output" id="terminal-output">
+            <p class="terminal-line terminal-info">Starting process...</p>
+        </div>
+
+        <footer>
+            <p>Code Collector © 2025</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

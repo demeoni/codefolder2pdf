@@ -1,0 +1,7 @@
+# Dev Temp Folders
+.trash/
+logs/
+
+# Dev Env
+.venv/
+.env/
