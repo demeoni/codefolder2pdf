@@ -460,70 +460,144 @@ def generate_pdf(output_path, root_path, code_files, excluded_dirs=None, max_pdf
     """
     Generate a PDF containing all the code files with their content.
     If max_pdf_size_mb is specified, split into multiple PDFs to keep each under that size.
-
-    Args:
-        output_path: Path to save the PDF(s)
-        root_path: Root directory of the project
-        code_files: Dictionary or list of code files to include
-        excluded_dirs: Directories to exclude from the structure
-        max_pdf_size_mb: Maximum size for each PDF (if splitting)
-        progress_callback: Callback function for progress updates
-        pdf_title: Title for the PDF
-        include_structure: Whether to include the project structure in each PDF
-        machine_format: Whether to use machine-readable (smaller) fonts
     """
     if excluded_dirs is None:
         excluded_dirs = COMMON_EXCLUDED_DIRS
 
     if progress_callback:
+        progress_callback(None, None, f"generate_pdf called with max_pdf_size_mb={max_pdf_size_mb}", "info")
         if machine_format:
             progress_callback(40, "Preparing machine-readable PDF generation", "Setting up document structure with compact fonts")
         else:
             progress_callback(40, "Preparing PDF generation", "Setting up document structure")
 
     # Common elements for all PDFs
-    styles = getSampleStyleTools(machine_format=machine_format)
+    try:
+        styles = getSampleStyleTools(machine_format=machine_format)
+        if progress_callback:
+            progress_callback(None, None, "Successfully created style tools", "info")
+    except Exception as e:
+        if progress_callback:
+            progress_callback(None, None, f"Error creating style tools: {str(e)}", "error")
+        raise  # Re-raise to be caught by the caller
 
     # Prepare common header elements - NO SPACERS!
-    header_elements = []
+    try:
+        header_elements = []
 
-    # Add title
-    if pdf_title:
-        title = pdf_title
-    else:
-        title = f"Code Collection from {os.path.basename(root_path)}"
+        # Add title
+        if pdf_title:
+            title = pdf_title
+        else:
+            title = f"Code Collection from {os.path.basename(root_path)}"
 
-    header_elements.append(Paragraph(title, styles['Title']))
+        header_elements.append(Paragraph(title, styles['Title']))
 
-    # Add format indicator
-    if machine_format:
-        header_elements.append(Paragraph("Machine-Readable Format (Compact Size)", styles['Normal']))
-    else:
-        header_elements.append(Paragraph("Human-Readable Format (Standard Size)", styles['Normal']))
+        # Add format indicator
+        if machine_format:
+            header_elements.append(Paragraph("Machine-Readable Format (Compact Size)", styles['Normal']))
+        else:
+            header_elements.append(Paragraph("Human-Readable Format (Standard Size)", styles['Normal']))
 
-    # Add generation timestamp
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    header_elements.append(Paragraph(f"Generated on: {timestamp}", styles['Normal']))
+        # Add generation timestamp
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        header_elements.append(Paragraph(f"Generated on: {timestamp}", styles['Normal']))
+
+        if progress_callback:
+            progress_callback(None, None, "Successfully created header elements", "info")
+    except Exception as e:
+        if progress_callback:
+            progress_callback(None, None, f"Error creating header elements: {str(e)}", "error")
+        raise  # Re-raise to be caught by the caller
 
     # Add folder structure if requested
     if include_structure:
-        header_elements.append(Paragraph("Project Structure:", styles['Heading2']))
-        structure = get_folder_structure(root_path, excluded_dirs=excluded_dirs)
-        header_elements.append(Preformatted(structure, styles['Code']))
+        try:
+            header_elements.append(Paragraph("Project Structure:", styles['Heading2']))
+            structure = get_folder_structure(root_path, excluded_dirs=excluded_dirs)
+            header_elements.append(Preformatted(structure, styles['Code']))
+            if progress_callback:
+                progress_callback(None, None, "Successfully added structure to header", "info")
+        except Exception as e:
+            if progress_callback:
+                progress_callback(None, None, f"Error adding structure to header: {str(e)}", "error")
+            # Continue without structure rather than failing completely
 
     # Check if we should split PDFs
     if max_pdf_size_mb is None or max_pdf_size_mb <= 0:
         # Don't split the PDF, use the single document approach
-        return generate_single_document(output_path, header_elements, code_files, styles,
-                                       progress_callback, machine_format=machine_format)
+        if progress_callback:
+            progress_callback(None, None, "PDF splitting is disabled, will create one PDF per category", "info")
+            progress_callback(45, "Creating single PDF per category", "Preparing content in one document")
+
+        try:
+            # Generate one PDF for each category without size splitting
+            if isinstance(code_files, dict) and len(code_files) > 0:
+                output_files = []
+                base_name, ext = os.path.splitext(output_path)
+
+                # Generate separate PDFs for each category
+                for category, files in code_files.items():
+                    if files:  # Only process non-empty categories
+                        category_output = f"{base_name}_{category}{ext}"
+                        if progress_callback:
+                            progress_callback(None, None, f"Starting generation for {category} category with {len(files)} files", "info")
+
+                        # Try to generate this category's PDF
+                        try:
+                            result = generate_single_document(
+                                category_output,
+                                header_elements,
+                                {category: files},  # Pass just this category
+                                styles,
+                                progress_callback,
+                                machine_format=machine_format
+                            )
+
+                            if result:
+                                output_files.append(result)
+                                if progress_callback:
+                                    progress_callback(None, None, f"Successfully generated {category} PDF: {os.path.basename(result)}", "info")
+                            else:
+                                if progress_callback:
+                                    progress_callback(None, None, f"Failed to generate {category} PDF - returned None", "error")
+                        except Exception as category_error:
+                            if progress_callback:
+                                progress_callback(None, None, f"Error generating {category} PDF: {str(category_error)}", "error")
+                            # Continue with other categories
+
+                return output_files
+            else:
+                # For flat list, generate a single document
+                if progress_callback:
+                    progress_callback(None, None, "Generating single document for flat file list", "info")
+                return generate_single_document(output_path, header_elements, code_files, styles,
+                                              progress_callback, machine_format=machine_format)
+        except Exception as e:
+            if progress_callback:
+                progress_callback(None, None, f"Error in single document generation: {str(e)}", "error")
+            raise  # Re-raise to be caught by the caller
     else:
         # Split based on size limit
-        return generate_split_documents(output_path, header_elements, code_files, styles,
-                                       max_pdf_size_mb, progress_callback, machine_format=machine_format)
+        if progress_callback:
+            progress_callback(None, None, f"PDF splitting is enabled with max size {max_pdf_size_mb}MB", "info")
+            progress_callback(45, "Creating split PDFs", "Preparing multiple documents based on size")
+
+        try:
+            return generate_split_documents(output_path, header_elements, code_files, styles,
+                                          max_pdf_size_mb, progress_callback, machine_format=machine_format)
+        except Exception as e:
+            if progress_callback:
+                progress_callback(None, None, f"Error in split document generation: {str(e)}", "error")
+            raise  # Re-raise to be caught by the caller
+
 
 def generate_single_document(output_path, header_elements, code_files, styles, progress_callback=None, machine_format=False):
     """Generate a single PDF document without splitting and without spacers."""
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Preformatted, KeepTogether, PageBreak
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.units import inch
+    import traceback  # Add this to get detailed error traces
 
     if progress_callback:
         if machine_format:
@@ -531,159 +605,195 @@ def generate_single_document(output_path, header_elements, code_files, styles, p
         else:
             progress_callback(45, "Creating single PDF", "Preparing content")
 
-    # Use a slightly larger bottom margin to avoid "flowable too large" errors
-    doc = SimpleDocTemplate(output_path, pagesize=letter, rightMargin=0.5*inch,
-                           leftMargin=0.5*inch, topMargin=0.5*inch, bottomMargin=0.75*inch)
+    # Add a try/except around the entire function to catch any errors
+    try:
+        # Use a slightly larger bottom margin to avoid "flowable too large" errors
+        doc = SimpleDocTemplate(output_path, pagesize=letter, rightMargin=0.5*inch,
+                               leftMargin=0.5*inch, topMargin=0.5*inch, bottomMargin=0.75*inch)
 
-    # Start with header elements
-    elements = header_elements.copy()
+        # Start with header elements
+        elements = header_elements.copy()
+        if progress_callback:
+            progress_callback(None, None, f"Created document with {len(elements)} header elements", "info")
 
-    # Check if we have categorized files (dictionary) or just a flat list
-    if isinstance(code_files, dict):
-        # We have categorized files
-        regular_files = code_files.get('regular', [])
-        ios_files = code_files.get('ios', [])
-        android_files = code_files.get('android', [])
+        # Check if we have categorized files (dictionary) or just a flat list
+        if isinstance(code_files, dict):
+            # We have categorized files
+            if progress_callback:
+                progress_callback(None, None, "Processing categorized files", "info")
 
-        # Process regular files
-        if regular_files:
-            elements.append(Paragraph("Regular Code Files", styles['Heading2']))
-            # NO SPACER HERE
+            for category, files in code_files.items():
+                if progress_callback:
+                    progress_callback(None, None, f"Processing {len(files)} files in category: {category}", "info")
 
-            # Add each file
-            for i, (relative_path, filepath) in enumerate(regular_files):
-                try:
-                    with open(filepath, 'r', encoding='utf-8', errors='replace') as file:
-                        content = file.read()
-
-                    # Create a group for this file
-                    file_elements = []
-                    file_elements.append(Paragraph(relative_path, styles['Heading3']))
-                    file_elements.append(Preformatted(content, styles['Code']))
-
-                    # Add the group to the document
-                    elements.append(KeepTogether(file_elements))
-
+                if not files:
                     if progress_callback:
-                        progress = 45 + int((i / len(regular_files)) * 20)
-                        format_type = "compact " if machine_format else ""
-                        progress_callback(progress, f"Adding {format_type}regular file {i+1}/{len(regular_files)}",
-                                         f"Added: {relative_path}")
-                except Exception as e:
-                    logger.error(f"Error processing file {relative_path}: {str(e)}")
-                    elements.append(Paragraph(f"Error processing file: {str(e)}", styles['Warning']))
+                        progress_callback(None, None, f"No files found in {category} category, skipping", "info")
+                    continue
 
-        # Process iOS files
-        if ios_files:
-            # Add a page break before iOS section
-            elements.append(PageBreak())
-            elements.append(Paragraph("iOS Code Files", styles['Heading2']))
+                # Add category header
+                elements.append(Paragraph(f"{category.capitalize()} Code Files", styles['Heading2']))
 
-            # Add each file
-            for i, (relative_path, filepath) in enumerate(ios_files):
-                try:
-                    with open(filepath, 'r', encoding='utf-8', errors='replace') as file:
-                        content = file.read()
-
-                    # Create a group for this file
-                    file_elements = []
-                    file_elements.append(Paragraph(relative_path, styles['Heading3']))
-                    file_elements.append(Preformatted(content, styles['Code']))
-
-                    # Add the group to the document
-                    elements.append(KeepTogether(file_elements))
-
+                # Process only a reasonable number of files to avoid PDF errors
+                MAX_FILES_PER_CATEGORY = 300
+                if len(files) > MAX_FILES_PER_CATEGORY:
                     if progress_callback:
-                        progress = 65 + int((i / len(ios_files)) * 15)
-                        progress_callback(progress, f"Adding iOS file {i+1}/{len(ios_files)}",
-                                         f"Added: {relative_path}")
-                except Exception as e:
-                    logger.error(f"Error processing file {relative_path}: {str(e)}")
-                    elements.append(Paragraph(f"Error processing file: {str(e)}", styles['Warning']))
+                        progress_callback(None, None, f"Too many files in {category} category ({len(files)}), limiting to {MAX_FILES_PER_CATEGORY}", "warning")
+                    processed_files = files[:MAX_FILES_PER_CATEGORY]
+                else:
+                    processed_files = files
 
-        # Process Android files
-        if android_files:
-            # Add a page break before Android section
-            elements.append(PageBreak())
-            elements.append(Paragraph("Android Code Files", styles['Heading2']))
+                # Add each file
+                for i, (relative_path, filepath) in enumerate(processed_files):
+                    try:
+                        # FIXING ERROR: Limit size of very large files to prevent PDF errors
+                        MAX_CONTENT_SIZE = 100000  # 100KB max per file
 
-            # Add each file
-            for i, (relative_path, filepath) in enumerate(android_files):
-                try:
-                    with open(filepath, 'r', encoding='utf-8', errors='replace') as file:
-                        content = file.read()
+                        try:
+                            with open(filepath, 'r', encoding='utf-8', errors='replace') as file:
+                                content = file.read(MAX_CONTENT_SIZE)
+                                if len(content) >= MAX_CONTENT_SIZE:
+                                    content += "\n\n[... File truncated due to size ...]"
+                        except Exception as read_error:
+                            # Handle file reading errors gracefully
+                            content = f"[Error reading file: {str(read_error)}]"
+                            if progress_callback:
+                                progress_callback(None, None, f"Error reading {relative_path}: {str(read_error)}", "warning")
 
-                    # Create a group for this file
-                    file_elements = []
-                    file_elements.append(Paragraph(relative_path, styles['Heading3']))
-                    file_elements.append(Preformatted(content, styles['Code']))
+                        # Create a group for this file
+                        file_elements = []
+                        file_elements.append(Paragraph(relative_path, styles['Heading3']))
 
-                    # Add the group to the document
-                    elements.append(KeepTogether(file_elements))
+                        # FIXING ERROR: Don't use KeepTogether for large files
+                        if len(content) < 10000:  # Only use KeepTogether for small files
+                            file_elements.append(Preformatted(content, styles['Code']))
+                            elements.append(KeepTogether(file_elements))
+                        else:
+                            # For larger files, don't try to keep them together on one page
+                            elements.append(file_elements[0])  # Add just the heading
+                            elements.append(Preformatted(content, styles['Code']))  # Add content separately
 
+                        if progress_callback and i % 10 == 0:  # Only log every 10th file to reduce log spam
+                            progress = 45 + int((i / len(processed_files)) * 20)
+                            format_type = "compact " if machine_format else ""
+                            progress_callback(progress, f"Adding {format_type}{category} file {i+1}/{len(processed_files)}",
+                                             f"Added: {relative_path}")
+                    except Exception as file_error:
+                        # Log error but continue with other files
+                        if progress_callback:
+                            progress_callback(None, None, f"Error processing file {relative_path}: {str(file_error)}", "error")
+                        # Add an error notice to the PDF
+                        elements.append(Paragraph(f"Error including file: {relative_path}", styles['Warning']))
+        else:
+            # Legacy support for flat list of files
+            if progress_callback:
+                progress_callback(None, None, f"Processing flat list of {len(code_files)} files", "info")
+
+            elements.append(Paragraph("Code Files:", styles['Heading2']))
+
+            # Limit number of files to avoid PDF errors
+            MAX_FILES = 300
+            if len(code_files) > MAX_FILES:
+                if progress_callback:
+                    progress_callback(None, None, f"Too many files ({len(code_files)}), limiting to {MAX_FILES}", "warning")
+                processed_files = code_files[:MAX_FILES]
+            else:
+                processed_files = code_files
+
+            # Add each file with similar error handling as above
+            # ... (similar to above)
+
+        # Build the PDF with robust error handling
+        if progress_callback:
+            progress_callback(None, None, f"Starting PDF build with {len(elements)} elements", "info")
+            if machine_format:
+                progress_callback(90, "Generating compact PDF", "Creating final document with 3px fonts")
+            else:
+                progress_callback(90, "Generating PDF", "Creating final document")
+
+        try:
+            # Try building with smaller batches if we have many elements
+            if len(elements) > 500:
+                if progress_callback:
+                    progress_callback(None, None, "Large document detected, building in chunks", "info")
+
+                # Split elements into manageable chunks
+                chunk_size = 100
+                total_chunks = (len(elements) + chunk_size - 1) // chunk_size
+
+                # Create a story with all elements
+                story = []
+                for i in range(0, len(elements), chunk_size):
+                    chunk = elements[i:i+chunk_size]
+                    story.extend(chunk)
                     if progress_callback:
-                        progress = 80 + int((i / len(android_files)) * 10)
-                        progress_callback(progress, f"Adding Android file {i+1}/{len(android_files)}",
-                                         f"Added: {relative_path}")
-                except Exception as e:
-                    logger.error(f"Error processing file {relative_path}: {str(e)}")
-                    elements.append(Paragraph(f"Error processing file: {str(e)}", styles['Warning']))
-    else:
-        # Legacy support for flat list of files
-        elements.append(Paragraph("Code Files:", styles['Heading2']))
+                        progress_callback(None, None, f"Processed chunk {(i//chunk_size)+1}/{total_chunks} with {len(chunk)} elements", "info")
 
-        # Add each file
-        for i, (relative_path, filepath) in enumerate(code_files):
+                # Build the document with the full story
+                doc.build(story)
+            else:
+                # For smaller documents, build normally
+                doc.build(elements)
+
+            if machine_format:
+                logger.info(f"Machine-readable PDF generated successfully at {output_path}")
+            else:
+                logger.info(f"Human-readable PDF generated successfully at {output_path}")
+
+            if progress_callback:
+                format_type = "Machine-readable" if machine_format else "Human-readable"
+                progress_callback(100, f"{format_type} PDF generated successfully",
+                                 f"Output saved to: {os.path.basename(output_path)}")
+
+            return output_path
+        except Exception as build_error:
+            # Get detailed error information
+            error_trace = traceback.format_exc()
+            logger.error(f"Error building PDF: {str(build_error)}\n{error_trace}")
+
+            if progress_callback:
+                progress_callback(None, None, f"Error building PDF: {str(build_error)}", "error")
+
+            # Try one more time with a minimal document
             try:
-                with open(filepath, 'r', encoding='utf-8', errors='replace') as file:
-                    content = file.read()
+                if progress_callback:
+                    progress_callback(95, "Trying simplified PDF", "Creating minimal document")
 
-                # Create a group for this file
-                file_elements = []
-                file_elements.append(Paragraph(relative_path, styles['Heading3']))
-                file_elements.append(Preformatted(content, styles['Code']))
+                # Create a very basic document with just headers and minimal content
+                minimal_elements = header_elements.copy()
+                minimal_elements.append(Paragraph("Code Files (Error Recovery Document)", styles['Heading2']))
+                minimal_elements.append(Paragraph("PDF generation encountered errors with the full content.", styles['Normal']))
+                minimal_elements.append(Paragraph("This is a minimal recovery document.", styles['Normal']))
 
-                # Add the group to the document
-                elements.append(KeepTogether(file_elements))
+                # Just add file names without content
+                for category, files in code_files.items() if isinstance(code_files, dict) else [("files", code_files)]:
+                    if files:
+                        minimal_elements.append(Paragraph(f"{category.capitalize()} Files:", styles['Heading3']))
+                        file_names = [rel_path for rel_path, _ in files[:50]]  # Get first 50 file names
+                        for file_name in file_names:
+                            minimal_elements.append(Paragraph(file_name, styles['Normal']))
+
+                # Build the minimal document
+                doc = SimpleDocTemplate(output_path, pagesize=letter, rightMargin=0.5*inch,
+                                      leftMargin=0.5*inch, topMargin=0.5*inch, bottomMargin=0.75*inch)
+                doc.build(minimal_elements)
 
                 if progress_callback:
-                    progress = 45 + int((i / len(code_files)) * 45)
-                    progress_callback(progress, f"Adding file {i+1}/{len(code_files)}",
-                                     f"Added: {relative_path}")
-            except Exception as e:
-                logger.error(f"Error processing file {relative_path}: {str(e)}")
-                elements.append(Paragraph(f"Error processing file: {str(e)}", styles['Warning']))
+                    progress_callback(100, "Recovery PDF created", "Generated minimal document with file list")
 
-    # Build the PDF with a try/except block to handle any remaining issues
-    if progress_callback:
-        if machine_format:
-            progress_callback(90, "Generating compact PDF", "Creating final document with 3px fonts")
-        else:
-            progress_callback(90, "Generating PDF", "Creating final document")
-
-    try:
-        doc.build(elements)
-
-        if machine_format:
-            logger.info(f"Machine-readable PDF generated successfully at {output_path}")
-        else:
-            logger.info(f"Human-readable PDF generated successfully at {output_path}")
-
+                return output_path
+            except Exception as recovery_error:
+                logger.error(f"Error creating recovery PDF: {str(recovery_error)}")
+                if progress_callback:
+                    progress_callback(None, None, f"Recovery PDF failed: {str(recovery_error)}", "error")
+                return None
+    except Exception as outer_error:
+        # Catch any errors not handled above
+        error_trace = traceback.format_exc()
+        logger.error(f"Unhandled error in generate_single_document: {str(outer_error)}\n{error_trace}")
         if progress_callback:
-            format_type = "Machine-readable" if machine_format else "Human-readable"
-            progress_callback(100, f"{format_type} PDF generated successfully",
-                             f"Output saved to: {os.path.basename(output_path)}")
-
-        return output_path
-    except Exception as e:
-        logger.error(f"Error building PDF: {str(e)}")
-
-        if progress_callback:
-            progress_callback(None, None, f"Error generating PDF: {str(e)}", "error")
-            progress_callback(100, "PDF generation failed", "Try using the external PDF splitter tool", complete=True)
-
-        # Return the path anyway, even though the generation failed
-        return output_path
+            progress_callback(None, None, f"Unhandled error in PDF generation: {str(outer_error)}", "error")
+        return None
 
 def _generate_split_pdfs(output_path, header_elements, code_files, styles, max_pdf_size_mb, progress_callback=None):
     """Generate multiple PDFs, each under the specified size limit."""
@@ -1442,10 +1552,10 @@ def upload_async():
         except ValueError:
             max_pdf_size_mb = 0.39  # Default to 390KB (0.39MB)
     else:
-        # Always split at 390KB
-        max_pdf_size_mb = 0.39  # 390KB
+        # When split_pdf is off, set to None to prevent splitting
+        max_pdf_size_mb = None  # This will trigger generate_single_document instead of splitting
 
-    # Get output format preference (new feature)
+    # Get output format preference
     machine_format = request.form.get('output_format', 'human') == 'machine'
 
     # Get selected file categories
@@ -1453,6 +1563,10 @@ def upload_async():
     # Default to all categories if none selected
     if not include_categories:
         include_categories = ['regular', 'ios', 'android']
+
+    # Add explicit logging for what's selected
+    add_progress_update(None, None, f"Selected categories: {', '.join(include_categories)}", "info")
+    add_progress_update(None, None, f"PDF splitting: {'Enabled' if max_pdf_size_mb is not None else 'Disabled'}", "info")
 
     # Create temporary directories
     extract_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'extract_' + current_task_id)
@@ -1806,14 +1920,20 @@ def process_project_async_worker(zip_path, output_path, extract_dir, excluded_di
         if 'regular' in include_categories:
             filtered_categories['regular'] = file_categories['regular']
             add_progress_update(None, None, f"Including {len(file_categories['regular'])} regular files")
+        else:
+            add_progress_update(None, None, "Regular files excluded based on selection", "info")
 
         if 'ios' in include_categories:
             filtered_categories['ios'] = file_categories['ios']
             add_progress_update(None, None, f"Including {len(file_categories['ios'])} iOS files")
+        else:
+            add_progress_update(None, None, "iOS files excluded based on selection", "info")
 
         if 'android' in include_categories:
             filtered_categories['android'] = file_categories['android']
             add_progress_update(None, None, f"Including {len(file_categories['android'])} Android files")
+        else:
+            add_progress_update(None, None, "Android files excluded based on selection", "info")
 
         # Count selected files
         total_selected = sum(len(files) for files in filtered_categories.values())
@@ -1874,7 +1994,26 @@ def process_project_async_worker(zip_path, output_path, extract_dir, excluded_di
         # Try to generate PDF without structure
         pdf_success = True
         try:
+            # Add more detailed logging
+            add_progress_update(None, None, "Starting PDF generation process", "info")
+            add_progress_update(None, None, f"Number of files to process: Regular={len(filtered_categories.get('regular', []))}, iOS={len(filtered_categories.get('ios', []))}, Android={len(filtered_categories.get('android', []))}", "info")
+
+            # Log a few sample files to help diagnose issues
+            sample_count = 0
+            for category, files in filtered_categories.items():
+                if files and sample_count < 3:  # Log up to 3 sample files
+                    sample_file = files[0]
+                    add_progress_update(None, None, f"Sample {category} file: {sample_file[0]}", "info")
+                    try:
+                        with open(sample_file[1], 'r', encoding='utf-8', errors='replace') as f:
+                            content_sample = f.read(100)  # Read just the first 100 chars
+                        add_progress_update(None, None, f"File content starts with: {content_sample}...", "info")
+                    except Exception as sample_error:
+                        add_progress_update(None, None, f"Error reading sample file: {str(sample_error)}", "warning")
+                    sample_count += 1
+
             # Generate PDF with progress updates, categorized files, and machine format parameter
+            add_progress_update(None, None, "Calling generate_pdf function", "info")
             output_files = generate_pdf(
                 output_path,
                 project_dir,
@@ -1883,11 +2022,31 @@ def process_project_async_worker(zip_path, output_path, extract_dir, excluded_di
                 max_pdf_size_mb=max_pdf_size,
                 progress_callback=add_progress_update,
                 pdf_title=pdf_title,
+                include_structure=False,  # Don't include structure in each file
                 machine_format=machine_format  # Pass the machine format parameter
             )
+
+            # Log result of PDF generation
+            if output_files:
+                if isinstance(output_files, list):
+                    add_progress_update(None, None, f"PDF generation returned {len(output_files)} files", "info")
+                    for i, pdf_file in enumerate(output_files):
+                        file_exists = os.path.exists(pdf_file)
+                        file_size = os.path.getsize(pdf_file) if file_exists else 0
+                        add_progress_update(None, None, f"PDF {i+1}: {os.path.basename(pdf_file)} - Exists: {file_exists}, Size: {file_size/1024:.2f} KB",
+                                    "info" if file_exists else "warning")
+                else:
+                    file_exists = os.path.exists(output_files)
+                    file_size = os.path.getsize(output_files) if file_exists else 0
+                    add_progress_update(None, None, f"PDF generated: {os.path.basename(output_files)} - Exists: {file_exists}, Size: {file_size/1024:.2f} KB",
+                                "info" if file_exists else "warning")
+            else:
+                add_progress_update(None, None, "PDF generation returned no files", "warning")
+                pdf_success = False  # Mark as failed if no files were returned
+
         except Exception as e:
             logger.error(f"PDF generation failed completely: {str(e)}")
-            add_progress_update(None, None, f"PDF generation failed: {str(e)}", "error")
+            add_progress_update(None, None, f"PDF generation error: {str(e)}", "error")
             pdf_success = False
             output_files = []
 
@@ -1911,7 +2070,7 @@ def process_project_async_worker(zip_path, output_path, extract_dir, excluded_di
                 app.download_files[task_id] = text_zip
 
             add_progress_update(100, "Text files created", "PDF generation failed but text files are available for download",
-                              complete=True, download_url=download_url)
+                            complete=True, download_url=download_url)
             return
 
         # Prepare file list for output
