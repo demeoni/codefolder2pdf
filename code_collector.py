@@ -111,70 +111,127 @@ progress_queue = queue.Queue()
 current_task_id = None
 
 
-def get_folder_structure(path, prefix="", is_last=True, excluded_dirs=None, include_files=True):
-    """Generate a text representation of the folder structure including files."""
+def get_folder_structure(path, level=0, prefix_map=None, excluded_dirs=None, include_files=True):
+    """
+    Generate a text representation of the folder structure with explicit tree formatting.
+    Uses a completely different approach with explicit indentation and ASCII characters.
+    """
     if excluded_dirs is None:
         excluded_dirs = COMMON_EXCLUDED_DIRS
 
-    # Get base name of the path
-    basename = os.path.basename(path)
+    if prefix_map is None:
+        prefix_map = []
 
     # Skip excluded directories
+    basename = os.path.basename(path)
     if basename in excluded_dirs:
         return ""
 
-    structure = prefix
+    # Build current line indentation based on prefix_map
+    indent = ""
+    for i in range(len(prefix_map)):
+        indent += "    " if not prefix_map[i] else "|   "
 
-    # Add appropriate prefix characters
-    if prefix:
-        structure += "└── " if is_last else "├── "
-
-    # Add current directory/file name
-    is_dir = os.path.isdir(path)
-
-    if is_dir:
-        structure += basename + "/\n"
+    # Add the appropriate connector for this level
+    if level > 0:
+        connector = "+-- "
     else:
-        structure += basename + "\n"
+        connector = ""
 
-    # If it's a directory, recursively process its contents
-    if is_dir:
-        # Get all items in the directory
-        try:
-            items = [os.path.join(path, item) for item in os.listdir(path)]
-        except PermissionError:
-            # Skip directories we can't access
-            return structure + prefix + "    " + "(Permission denied)\n"
-        except Exception as e:
-            # Handle other errors
-            return structure + prefix + f"    (Error: {str(e)})\n"
+    # Create the current line with proper indentation and connector
+    is_dir = os.path.isdir(path)
+    line = indent + connector + basename + ("/" if is_dir else "") + "\n"
 
-        # Filter out excluded directories
+    # Return just this line if it's a file or we can't access directory contents
+    if not is_dir:
+        return line
+
+    # Process the directory contents
+    try:
+        items = sorted([os.path.join(path, item) for item in os.listdir(path)],
+                      key=lambda x: (not os.path.isdir(x), x.lower()))
+
+        # Filter items
         items = [item for item in items if os.path.isdir(item) or include_files]
         items = [item for item in items if os.path.basename(item) not in excluded_dirs]
-
-        # Skip macOS hidden files
         items = [item for item in items if not os.path.basename(item).startswith('._')]
-
-        # Sort: directories first, then files
-        items.sort(key=lambda x: (not os.path.isdir(x), x.lower()))
 
         # Process each item
         for i, item in enumerate(items):
-            # Determine the new prefix for the next level
-            if prefix:
-                new_prefix = prefix + ("    " if is_last else "│   ")
-            else:
-                new_prefix = prefix
+            # Update prefix map for the next level
+            is_last = (i == len(items) - 1)
+            new_prefix_map = prefix_map + [not is_last]
 
-            # Determine if this is the last item
-            is_last_item = (i == len(items) - 1)
+            # Add this item to the output
+            line += get_folder_structure(item, level+1, new_prefix_map, excluded_dirs, include_files)
 
-            # Add to the structure
-            structure += get_folder_structure(item, new_prefix, is_last_item, excluded_dirs, include_files)
+        return line
 
-    return structure
+    except (PermissionError, OSError):
+        return line + indent + "    (Access error)\n"
 
+def generate_improved_structure_pdf(output_path, root_path, excluded_dirs=None, pdf_title=None):
+    """Generate a PDF with explicit tree visualization."""
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Preformatted
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import inch
+
+    if excluded_dirs is None:
+        excluded_dirs = COMMON_EXCLUDED_DIRS
+
+    # Common elements for all PDFs
+    styles = getSampleStyleTools()
+
+    # Create a custom monospaced style for tree structure
+    tree_style = styles['Code']
+    tree_style.fontName = 'Courier'  # Ensure monospace font
+    tree_style.fontSize = 8          # Smaller font for more content
+
+    # Prepare document elements
+    elements = []
+
+    # Add title
+    if pdf_title:
+        title = pdf_title
+    else:
+        title = f"Code Collection: {os.path.basename(root_path)}"
+
+    elements.append(Paragraph(title, styles['Title']))
+
+    # Add generation timestamp
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    elements.append(Paragraph(f"Generated on: {timestamp}", styles['Normal']))
+
+    # Add structure heading
+    elements.append(Paragraph("Project Structure:", styles['Heading2']))
+
+    # Add legend/key for the tree visualization
+    elements.append(Paragraph("Key: '+--' indicates a branch, '|' indicates continuation", styles['Normal']))
+
+    # Get the improved folder structure with clear tree visualization
+    structure = get_folder_structure(root_path, excluded_dirs=excluded_dirs)
+
+    # Add the structure using Preformatted to preserve spaces and formatting
+    elements.append(Preformatted(structure, tree_style))
+
+    # Create the PDF
+    doc = SimpleDocTemplate(
+        output_path,
+        pagesize=letter,
+        rightMargin=0.5*inch,
+        leftMargin=0.5*inch,
+        topMargin=0.5*inch,
+        bottomMargin=0.75*inch
+    )
+
+    try:
+        doc.build(elements)
+        logger.info(f"Structure PDF successfully created with tree visualization at {output_path}")
+        return output_path
+    except Exception as e:
+        logger.error(f"Error building structure PDF: {str(e)}")
+        return None
 
 def collect_code_files(root_path, code_extensions=None, excluded_dirs=None, excluded_extensions=None, excluded_files=None, progress_callback=None):
     """Collect all code files in the given directory and its subdirectories with categorization."""
@@ -1030,7 +1087,7 @@ def _split_category_files(base_output, header_elements, files, styles, max_size_
     return output_files
 
 def generate_structure_pdf(output_path, root_path, excluded_dirs=None, pdf_title=None):
-    """Generate a PDF containing only the project structure."""
+    """Generate a PDF containing only the project structure with enhanced formatting."""
     if excluded_dirs is None:
         excluded_dirs = COMMON_EXCLUDED_DIRS
 
@@ -1052,9 +1109,16 @@ def generate_structure_pdf(output_path, root_path, excluded_dirs=None, pdf_title
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     elements.append(Paragraph(f"Generated on: {timestamp}", styles['Normal']))
 
-    # Add folder structure
+    # Create enhanced project structure visualization
     elements.append(Paragraph("Project Structure:", styles['Heading2']))
+
+    # Get structure with enhanced ASCII art
     structure = get_folder_structure(root_path, excluded_dirs=excluded_dirs)
+
+    # Add a label to clarify formatting
+    elements.append(Paragraph("Key: '+--' indicates a branch, '|' indicates continuation", styles['Normal']))
+
+    # Create a more visually appealing structure representation
     elements.append(Preformatted(structure, styles['Code']))
 
     # Create the PDF
@@ -1063,11 +1127,7 @@ def generate_structure_pdf(output_path, root_path, excluded_dirs=None, pdf_title
 
     try:
         doc.build(elements)
-        # Add explicit logging to confirm file creation
-        if os.path.exists(output_path):
-            logger.info(f"Structure PDF successfully created at {output_path} (Size: {os.path.getsize(output_path)} bytes)")
-        else:
-            logger.error(f"Structure PDF file not found after creation: {output_path}")
+        logger.info(f"Structure PDF successfully created at {output_path}")
         return output_path
     except Exception as e:
         logger.error(f"Error building structure PDF: {str(e)}")
@@ -1689,7 +1749,7 @@ def process_project_async_worker(zip_path, output_path, extract_dir, excluded_di
         add_progress_update(40, "Generating structure PDF", "Creating project structure document")
 
         # Generate the structure PDF with explicit logging
-        structure_pdf = generate_structure_pdf(
+        structure_pdf = generate_improved_structure_pdf(
             structure_pdf_path,
             project_dir,
             excluded_dirs=excluded_dirs,

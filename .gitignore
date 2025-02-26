@@ -5,3 +5,6 @@ logs/
 # Dev Env
 .venv/
 .env/
+
+# System
+.DS_Store
